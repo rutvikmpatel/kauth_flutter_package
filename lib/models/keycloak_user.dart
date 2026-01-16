@@ -85,6 +85,7 @@ class KeycloakUser extends AuthUser {
 
   String? get primaryIdentifier => email ?? phoneNumber;
 
+  @override
   bool get isAnonymous => false;
 
   bool get hasVerifiedContact => emailVerified || phoneVerified;
@@ -110,15 +111,12 @@ class KeycloakUser extends AuthUser {
   }
 
   factory KeycloakUser.fromJwt(String token) {
-    print("DEBUG: Decoding JWT token: $token");
     Map<String, dynamic> decodedToken = JwtDecoder.decode(token);
-    print("DEBUG: Decoded token payload: $decodedToken");
     
     final uid = decodedToken['sub'];
     if (uid == null) throw Exception("Invalid token: sub claim missing");
 
     final iat = decodedToken['iat'] is int ? decodedToken['iat'] as int : null;
-    final exp = decodedToken['exp'] is int ? decodedToken['exp'] as int : null;
 
     final metadata = KeycloakUserMetadata(
       creationTimestamp: iat,

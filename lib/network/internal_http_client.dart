@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import '../util/k_auth_logger.dart';
 
 class InternalHttpClient extends http.BaseClient {
   final http.Client _inner = http.Client();
@@ -18,12 +17,19 @@ class InternalHttpClient extends http.BaseClient {
     
     // Add Platform
     try {
-      if (Platform.isAndroid) headers['X-Platform'] = 'Android';
-      else if (Platform.isIOS) headers['X-Platform'] = 'iOS';
-      else if (Platform.isWindows) headers['X-Platform'] = 'Windows';
-      else if (Platform.isMacOS) headers['X-Platform'] = 'MacOS';
-      else if (Platform.isLinux) headers['X-Platform'] = 'Linux';
-      else headers['X-Platform'] = 'Unknown';
+      if (Platform.isAndroid) {
+        headers['X-Platform'] = 'Android';
+      } else if (Platform.isIOS) {
+        headers['X-Platform'] = 'iOS';
+      } else if (Platform.isWindows) {
+        headers['X-Platform'] = 'Windows';
+      } else if (Platform.isMacOS) {
+        headers['X-Platform'] = 'MacOS';
+      } else if (Platform.isLinux) {
+        headers['X-Platform'] = 'Linux';
+      } else {
+        headers['X-Platform'] = 'Unknown';
+      }
     } catch (e) {
       headers['X-Platform'] = 'Web/Unknown';
     }
@@ -43,7 +49,7 @@ class InternalHttpClient extends http.BaseClient {
         headers['X-App-Signature'] = info.buildSignature;
       }
     } catch (e) {
-      KAuthLogger.log("Failed to get package info: $e");
+      // KAuthLogger.log("Failed to get package info: $e");
     }
     
     _cachedMetadataHeaders = headers;
@@ -52,7 +58,7 @@ class InternalHttpClient extends http.BaseClient {
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    KAuthLogger.log('Request: ${request.method} ${request.url}');
+    // KAuthLogger.log('Request: ${request.method} ${request.url}');
     
     // 1. Add Configured Default Headers
     if (defaultHeaders != null) {
@@ -63,14 +69,14 @@ class InternalHttpClient extends http.BaseClient {
     final metadataHeaders = await _getMetadataHeaders();
     request.headers.addAll(metadataHeaders);
     
-    KAuthLogger.log('Headers: ${request.headers}');
+    // KAuthLogger.log('Headers: ${request.headers}');
     
     try {
       final response = await _inner.send(request);
-      KAuthLogger.log('Response: ${response.statusCode} for ${request.url}');
+      // KAuthLogger.log('Response: ${response.statusCode} for ${request.url}');
       return response;
-    } catch (e, stack) {
-      KAuthLogger.error('Error: $e', error: e, stackTrace: stack);
+    } catch (e) {
+      // KAuthLogger.error('Error: $e', error: e, stackTrace: stack);
       rethrow;
     }
   }

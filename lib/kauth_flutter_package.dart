@@ -46,7 +46,7 @@ class KAuth {
   static Future<void> verifyOtp(String phoneNumber, String otp, {String countryCode = '+91'}) async {
     if (_provider == null) throw Exception("KAuth not initialized");
     final result = await _provider!.verifyOtp(phoneNumber, otp, countryCode: countryCode);
-    await AuthManager().setSession(result.user!, result.token!);
+    await AuthManager().setSession(result.user, result.token);
   }
 
   static Future<void> logout() async {
