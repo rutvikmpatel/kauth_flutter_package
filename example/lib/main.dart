@@ -204,6 +204,11 @@ class _LoginScreenState extends State<LoginScreen> {
             Text("Verified: ${user.hasVerifiedContact}"),
             const SizedBox(height: 32),
             ElevatedButton(
+              onPressed: _testAuthenticatedApi,
+              child: const Text("Test Authenticated API"),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
               onPressed: _logout,
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
               child: const Text("Logout"),
@@ -212,5 +217,36 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _testAuthenticatedApi() async {
+    setState(() {
+      _status = "Calling Authenticated API...";
+      _isLoading = true;
+    });
+
+    try {
+      // We use httpbin.org to echo back our headers so we can verify them
+      final response = await KAuth.client.get(Uri.parse('https://httpbin.org/headers'));
+      
+      if (mounted) {
+        setState(() {
+          _status = "API Result: ${response.statusCode}";
+          _isLoading = false;
+        });
+        print("API Response Body: ${response.body}");
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Check logs for headers! Status: ${response.statusCode}")),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+           _status = "API Error: $e";
+           _isLoading = false;
+        });
+      }
+    }
   }
 }
