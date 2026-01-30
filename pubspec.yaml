@@ -14,6 +14,7 @@ dependencies:
   http: ^1.0.0
   jwt_decoder: ^2.0.1
   package_info_plus: ^9.0.0
+  device_info_plus: ^12.3.0
 
 dev_dependencies:
   flutter_test:
@@ -26,7 +27,7 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
-flutter:
+#flutter:
 
   # To add assets to your package, add an assets section, like this:
   # assets:
