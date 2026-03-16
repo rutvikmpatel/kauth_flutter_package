@@ -135,9 +135,9 @@ void main() async {
 }
 ```
 
-### 5. Authenticated Requests
+### 5. Authenticated Requests (HTTP)
 
-Use `KAuth.client` to make authenticated HTTP requests. It automatically attaches the Bearer token and handles 401 retries.
+Use `KAuth.client` to make authenticated HTTP requests with the standard `http` package. It automatically attaches the Bearer token and handles 401 retries.
 
 ```dart
 void main() async {
@@ -146,7 +146,38 @@ void main() async {
 }
 ```
 
-### 6. Logout
+### 6. Authenticated Requests (Dio) - Recommended for Production
+
+For advanced use cases (file uploads, heavy concurrency, true request queuing), use the provided `AuthenticatedDio` class. This wrapper natively locks requests during token refreshes to prevent "thundering herd" issues.
+
+```dart
+import 'package:dio/dio.dart';
+import 'package:kauth_flutter_package/network/authenticated_dio.dart';
+
+// Create a singleton or global instance to be used across your app
+final apiService = AuthenticatedDio(
+  options: BaseOptions(
+    baseUrl: 'https://api.yourbackend.com/v1',
+    connectTimeout: const Duration(seconds: 10),
+  ),
+  // (Optional) Add extra interceptors like Logging
+  additionalInterceptors: [
+     LogInterceptor(requestBody: true, responseBody: true),
+  ],
+);
+
+// Then, use it anywhere in your app just like standard Dio:
+Future<void> fetchUserData() async {
+  try {
+     final response = await apiService.dio.get('/users/me');
+     print(response.data);
+  } catch (e) {
+     print("Failed to fetch user: $e");
+  }
+}
+```
+
+### 7. Logout
 
 ```dart
 void main() async {
