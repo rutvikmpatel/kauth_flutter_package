@@ -12,6 +12,8 @@ import 'models/keycloak_user.dart';
 import 'models/k_device_info.dart';
 import 'provider/keycloak_auth_provider.dart';
 import 'network/authenticated_http_client.dart';
+import 'network/authenticated_dio.dart';
+export 'network/authenticated_dio.dart';
 import 'models/k_auth_config.dart';
 import 'repo/auth_repository.dart';
 
