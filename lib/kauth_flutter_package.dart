@@ -123,5 +123,18 @@ class KAuth {
     }
   }
 
+  static Future<void> logoutBackChannel() async {
+    try {
+      final token = AuthManager().currentToken;
+      if (_provider != null && token != null) {
+        await _provider!.remoteLogoutBackChannel(token);
+      }
+    } catch (e) {
+      // Ignore remote logout errors and proceed to local logout
+    } finally {
+      await AuthManager().logout();
+    }
+  }
+
   static http.Client get client => AuthenticatedHttpClient();
 }

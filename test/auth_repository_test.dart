@@ -50,5 +50,27 @@ void main() {
        final defaultConfig = KAuthConfig.defaults();
        expect(defaultConfig.baseUrl, "https://auth.keshavonline.com");
     });
+
+    test('logoutBackChannel makes POST request to correct endpoint with JSON payload', () async {
+      when(mockClient.post(
+        any,
+        headers: anyNamed('headers'),
+        body: anyNamed('body'),
+      )).thenAnswer(
+        (_) async => http.Response('', 204),
+      );
+
+      await repository.logoutBackChannel('test_refresh_token');
+
+      final captured = verify(mockClient.post(
+        captureAny,
+        headers: captureAnyNamed('headers'),
+        body: captureAnyNamed('body'),
+      )).captured;
+
+      expect(captured[0].toString(), 'https://test.auth.com/logout/backChannel');
+      expect(captured[1]['Content-Type'], 'application/json');
+      expect(captured[2], '{"refreshToken":"test_refresh_token"}');
+    });
   });
 }

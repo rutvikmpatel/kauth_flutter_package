@@ -22,6 +22,7 @@ class AuthRepositoryImpl implements AuthRepository {
   // Token Routes
   String get refreshUrl => "${config.baseUrl}/refresh";
   String get logoutUrl => "${config.baseUrl}/logout";
+  String get logoutBackChannelUrl => "${config.baseUrl}/logout/backChannel";
 
   @override
   Future<void> sendOtp(String phone, {String countryCode = '+91'}) async {
@@ -116,6 +117,26 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (e) {
       if (e is KAuthException) rethrow;
       throw KAuthNetworkException('Network error during logout', e);
+    }
+  }
+
+  @override
+  Future<void> logoutBackChannel(String refreshToken) async {
+    try {
+      final response = await _client.post(
+        Uri.parse(logoutBackChannelUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refreshToken}),
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return;
+      } else {
+        throw KAuthServerException('Failed to backchannel logout: ${response.body}', statusCode: response.statusCode);
+      }
+    } catch (e) {
+      if (e is KAuthException) rethrow;
+      throw KAuthNetworkException('Network error during backchannel logout', e);
     }
   }
 }

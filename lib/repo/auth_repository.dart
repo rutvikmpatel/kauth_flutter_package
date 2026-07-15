@@ -13,4 +13,6 @@ abstract class AuthRepository {
   Future<KeycloakTokenResponse> refreshToken(String refreshToken);
 
   Future<void> logout(String refreshToken);
+
+  Future<void> logoutBackChannel(String refreshToken);
 }

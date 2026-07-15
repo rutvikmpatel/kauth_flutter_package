@@ -66,4 +66,10 @@ class KeycloakAuthProvider extends AuthProvider {
       await _repository.logout(token.refreshToken!);
     }
   }
+
+  Future<void> remoteLogoutBackChannel(AuthToken token) async {
+    if (token.refreshToken != null) {
+      await _repository.logoutBackChannel(token.refreshToken!);
+    }
+  }
 }
