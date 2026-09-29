@@ -17,11 +17,17 @@ class KeycloakAuthProvider extends AuthProvider {
       throw UnimplementedError("Use sendOtp and verifyOtp for Keycloak login");
   }
 
-  DateTime? _calculateExpiresAt(int? expiresInSeconds) {
-    if (expiresInSeconds == null) return null;
-    final buffer = expiresInSeconds > 60 ? 30 : 0;
-    return DateTime.now().add(Duration(seconds: expiresInSeconds - buffer));
-  }
+  // CRITICAL ARCHITECTURAL DECISION:
+  // We intentionally keep `expiresAt: null` on AuthToken.
+  //
+  // Reason: In `package:authflow`, if `AuthToken.isExpired` is true during session restoration
+  // (_restoreSession) and a refresh attempt fails (e.g. device is offline / Airplane mode on cold launch),
+  // authflow will execute `await _storage!.clearAll()` and permanently wipe the user's saved session!
+  //
+  // Instead, proactive token expiration checks are performed directly on the JWT payload via
+  // `JwtDecoder.isExpired(token.accessToken)` in `AuthenticatedDio.onRequest` and `AuthenticatedHttpClient`.
+  // This guarantees proactive token refresh when online, while preventing authflow from ever wiping
+  // offline sessions on cold start. DO NOT set `expiresAt` here without addressing authflow's clearAll trap!
 
   @override
   Future<bool> checkSession(AuthToken token, AuthUser user) async {
@@ -33,22 +39,41 @@ class KeycloakAuthProvider extends AuthProvider {
     return !token.isExpired;
   }
 
+  Future<AuthToken?>? _inFlightRefresh;
+
   @override
   Future<AuthToken?> refreshToken(AuthToken currentToken, AuthUser user) async {
     if (currentToken.refreshToken == null) {
       return null;
     }
 
+    // If a refresh is already in-flight across any Dio instance (e.g. mainApi & messagingApi),
+    // share the exact same Future to prevent duplicate network calls.
+    if (_inFlightRefresh != null) {
+      return _inFlightRefresh;
+    }
+
+    final future = _doRefreshToken(currentToken);
+    _inFlightRefresh = future;
+    try {
+      return await future;
+    } finally {
+      _inFlightRefresh = null;
+    }
+  }
+
+  Future<AuthToken?> _doRefreshToken(AuthToken currentToken) async {
     try {
       final response = await _repository.refreshToken(currentToken.refreshToken!);
       return AuthToken(
         accessToken: response.access_token,
         refreshToken: response.refresh_token,
-        expiresAt: _calculateExpiresAt(response.expires_in),
+        // expiresAt intentionally kept null (see architectural decision comment above)
+        expiresAt: null,
       );
     } catch (e) {
-      // Refresh failed
-      return null;
+      // Re-throw so caller (AuthenticatedDio) knows why refresh failed (network/500 vs 400 invalid_grant)
+      rethrow;
     }
   }
   
@@ -74,7 +99,8 @@ class KeycloakAuthProvider extends AuthProvider {
       token: AuthToken(
         accessToken: token,
         refreshToken: tokenResponse.refresh_token,
-        expiresAt: _calculateExpiresAt(tokenResponse.expires_in),
+        // expiresAt intentionally kept null (see architectural decision comment above)
+        expiresAt: null,
       ),
     );
   }

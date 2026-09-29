@@ -1,13 +1,16 @@
 import 'package:http/http.dart' as http;
 import 'package:authflow/authflow.dart';
-import 'package:jwt_decoder/jwt_decoder.dart';
+import 'authenticated_dio.dart';
 
 class AuthenticatedHttpClient extends http.BaseClient {
   final http.Client _inner = http.Client();
+  final Duration clockSkewBuffer;
+
+  AuthenticatedHttpClient({this.clockSkewBuffer = const Duration(seconds: 30)});
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    // 1. Check if token is expired before sending (Preventative)
+    // 1. Check if token is expired before sending (Preventative with clock skew buffer)
     if (_isTokenExpired()) {
       await _tryRefresh();
     }
@@ -52,11 +55,7 @@ class AuthenticatedHttpClient extends http.BaseClient {
     final token = AuthManager().currentToken;
     if (token == null) return false;
     if (token.isExpired) return true;
-    try {
-      return JwtDecoder.isExpired(token.accessToken);
-    } catch (_) {
-      return false;
-    }
+    return AuthenticatedDio.isJwtExpired(token.accessToken, buffer: clockSkewBuffer);
   }
 
   Future<bool> _tryRefresh() async {

@@ -12,8 +12,8 @@ import 'models/keycloak_user.dart';
 import 'models/k_device_info.dart';
 import 'provider/keycloak_auth_provider.dart';
 import 'network/authenticated_http_client.dart';
-import 'network/authenticated_dio.dart';
 export 'network/authenticated_dio.dart';
+export 'network/authenticated_http_client.dart';
 import 'models/k_auth_config.dart';
 import 'repo/auth_repository.dart';
 
@@ -107,7 +107,7 @@ class KAuth {
   static Future<void> verifyOtp(String phoneNumber, String otp, {String countryCode = '+91'}) async {
     if (_provider == null) throw Exception("KAuth not initialized");
     final result = await _provider!.verifyOtp(phoneNumber, otp, countryCode: countryCode);
-    await AuthManager().setSession(result.user, result.token);
+    await AuthManager().setSession(result.user, result.token, providerId: _provider!.providerId);
   }
 
   static Future<void> logout() async {
