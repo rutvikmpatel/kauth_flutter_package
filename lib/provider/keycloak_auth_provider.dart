@@ -17,6 +17,22 @@ class KeycloakAuthProvider extends AuthProvider {
       throw UnimplementedError("Use sendOtp and verifyOtp for Keycloak login");
   }
 
+  DateTime? _calculateExpiresAt(int? expiresInSeconds) {
+    if (expiresInSeconds == null) return null;
+    final buffer = expiresInSeconds > 60 ? 30 : 0;
+    return DateTime.now().add(Duration(seconds: expiresInSeconds - buffer));
+  }
+
+  @override
+  Future<bool> checkSession(AuthToken token, AuthUser user) async {
+    // If an offline refresh token exists, the user session remains valid
+    // even if the short-lived access token is expired.
+    if (token.refreshToken != null && token.refreshToken!.isNotEmpty) {
+      return true;
+    }
+    return !token.isExpired;
+  }
+
   @override
   Future<AuthToken?> refreshToken(AuthToken currentToken, AuthUser user) async {
     if (currentToken.refreshToken == null) {
@@ -28,6 +44,7 @@ class KeycloakAuthProvider extends AuthProvider {
       return AuthToken(
         accessToken: response.access_token,
         refreshToken: response.refresh_token,
+        expiresAt: _calculateExpiresAt(response.expires_in),
       );
     } catch (e) {
       // Refresh failed
@@ -52,7 +69,14 @@ class KeycloakAuthProvider extends AuthProvider {
     // Since we are implementing custom flow, we return AuthResult here to be used by the caller
     // who then calls AuthManager.setSession().
     
-    return AuthResult(user: user, token: AuthToken(accessToken: token, refreshToken: tokenResponse.refresh_token));
+    return AuthResult(
+      user: user,
+      token: AuthToken(
+        accessToken: token,
+        refreshToken: tokenResponse.refresh_token,
+        expiresAt: _calculateExpiresAt(tokenResponse.expires_in),
+      ),
+    );
   }
 
   @override

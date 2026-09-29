@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'package:authflow/authflow.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AuthenticatedHttpClient extends http.BaseClient {
   final http.Client _inner = http.Client();
@@ -48,7 +49,14 @@ class AuthenticatedHttpClient extends http.BaseClient {
   }
 
   bool _isTokenExpired() {
-    return AuthManager().currentToken?.isExpired ?? false;
+    final token = AuthManager().currentToken;
+    if (token == null) return false;
+    if (token.isExpired) return true;
+    try {
+      return JwtDecoder.isExpired(token.accessToken);
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<bool> _tryRefresh() async {
