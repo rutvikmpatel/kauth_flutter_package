@@ -1,6 +1,6 @@
 name: kauth_flutter_package
 description: A Flutter authentication package for Keycloak integration, providing OTP login, token management, and secure storage via authflow.
-version: 0.0.4
+version: 0.0.5
 homepage: https://github.com/rutvikmpatel/kauth_flutter_package
 
 environment:

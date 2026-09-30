@@ -51,29 +51,44 @@ class AuthenticatedDio {
   bool _isJwtExpired(String token, {Duration buffer = const Duration(seconds: 30)}) =>
       isJwtExpired(token, buffer: buffer);
 
-  /// Determines whether a refresh failure is transient (network loss, timeout, 5xx server error)
-  /// vs a permanent authentication revocation (e.g. 400 invalid_grant).
-  bool _isNetworkOrServerError(dynamic e) {
+  /// Determines whether a refresh failure is an explicit, permanent authentication revocation
+  /// (e.g. Keycloak returned 400 with 'invalid_grant', 'invalid_token', or 'session not found')
+  /// versus any transient issue (network offline, timeouts, 429 rate limit, 5xx server crash).
+  bool _isPermanentAuthRevocation(dynamic e) {
     if (e is AuthException) {
-      return _isNetworkOrServerError(e.error);
+      return _isPermanentAuthRevocation(e.error);
     }
-    if (e is KAuthNetworkException) return true;
+    if (e is KAuthNetworkException) return false;
     if (e is KAuthServerException) {
       final status = e.statusCode;
-      if (status != null && status >= 500) return true;
-      return false;
+      if (status != null && status >= 500) return false;
     }
+
     final str = e.toString().toLowerCase();
-    return str.contains('socketexception') ||
+
+    // Any network or connection-related error is never a permanent auth revocation
+    if (str.contains('socketexception') ||
         str.contains('timeout') ||
         str.contains('failed host lookup') ||
         str.contains('connection refused') ||
         str.contains('connection reset') ||
         str.contains('network') ||
-        str.contains('500') ||
-        str.contains('502') ||
-        str.contains('503') ||
-        str.contains('504');
+        str.contains('osstatus error') ||
+        str.contains('handshake') ||
+        str.contains('clientexception')) {
+      return false;
+    }
+
+    // Explicit RFC 6749 & Keycloak permanent revocation indicators
+    return str.contains('invalid_grant') ||
+        str.contains('invalid_token') ||
+        str.contains('session not found') ||
+        str.contains('session_expired') ||
+        str.contains('token expired') ||
+        str.contains('token is not active') ||
+        str.contains('invalid refresh token') ||
+        str.contains('user not found') ||
+        str.contains('user is disabled');
   }
 
   void _setupInterceptors(List<Interceptor>? additionalInterceptors) {
@@ -92,17 +107,22 @@ class AuthenticatedDio {
             } catch (e) {
               // If proactive refresh failed due to permanent auth revocation (e.g. 400 invalid_grant),
               // reject immediately to avoid sending a doomed request with an expired token.
-              if (!_isNetworkOrServerError(e)) {
+              if (_isPermanentAuthRevocation(e)) {
                 return handler.reject(
                   DioException(
                     requestOptions: options,
+                    response: Response(
+                      requestOptions: options,
+                      statusCode: 401,
+                      statusMessage: 'Unauthorized: Session expired or revoked',
+                    ),
                     type: DioExceptionType.badResponse,
                     error: e,
                     message: 'Authentication session expired or revoked.',
                   ),
                 );
               }
-              // If network/offline, ignore here; the outgoing request will proceed and fail naturally with connection error.
+              // If transient (network/500/rate limit), ignore here; the outgoing request will proceed and fail naturally.
             }
           }
 
@@ -156,21 +176,21 @@ class AuthenticatedDio {
               // requests automatically until this is resolved.
               newToken = await AuthManager().refreshSession();
             } catch (e) {
-              // 5. Differentiate between transient network/server issues vs permanent auth revocation.
-              // If the refresh failed due to offline/network/500, return a connectionError
-              // so the app does NOT treat it as a revoked session and does NOT log out the user!
-              if (_isNetworkOrServerError(e)) {
-                return handler.next(
-                  DioException(
-                    requestOptions: originalRequest,
-                    type: DioExceptionType.connectionError,
-                    error: e,
-                    message: 'Authentication token refresh failed due to network or server error.',
-                  ),
-                );
+              // 5. Only pass 401 downstream if Keycloak explicitly confirmed the session is permanently dead.
+              if (_isPermanentAuthRevocation(e)) {
+                return handler.next(err);
               }
-              // Permanent session failure (e.g. 400 invalid_grant) -> pass 401 to trigger login prompt
-              return handler.next(err);
+
+              // For ANY other error (network drop, timeout, 5xx server error, rate limit),
+              // suppress the 401 and convert to connectionError so the app does NOT log out the user!
+              return handler.next(
+                DioException(
+                  requestOptions: originalRequest,
+                  type: DioExceptionType.connectionError,
+                  error: e,
+                  message: 'Authentication token refresh failed due to network or server error.',
+                ),
+              );
             }
 
             if (newToken != null && newToken.accessToken.isNotEmpty) {

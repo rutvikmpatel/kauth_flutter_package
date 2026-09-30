@@ -40,12 +40,20 @@ class FakeAuthRepository implements AuthRepository {
 
   int refreshCallCount = 0;
   bool shouldThrowNetworkError = false;
+  bool shouldThrowServer400 = false;
+  bool shouldThrowRateLimit429 = false;
 
   @override
   Future<KeycloakTokenResponse> refreshToken(String refreshToken) async {
     refreshCallCount++;
     if (shouldThrowNetworkError) {
       throw KAuthNetworkException('Simulated network timeout/socket failure');
+    }
+    if (shouldThrowRateLimit429) {
+      throw KAuthServerException('Rate limited: Too many requests', statusCode: 429);
+    }
+    if (shouldThrowServer400) {
+      throw KAuthServerException('Failed to refresh token: {"error":"invalid_grant","error_description":"Offline user session not found"}', statusCode: 400);
     }
     await Future.delayed(const Duration(milliseconds: 20));
     return KeycloakTokenResponse(
@@ -244,6 +252,103 @@ void main() {
       final response = await authDio.dio.get('/test').timeout(const Duration(seconds: 2));
       expect(response.statusCode, equals(200));
       expect(adapter.attempts, equals(2));
+    });
+
+    test('suppresses 401 and emits connectionError when refresh fails due to network outage', () async {
+      final fakeRepo = FakeAuthRepository()..shouldThrowNetworkError = true;
+      final provider = KeycloakAuthProvider(repository: fakeRepo);
+      await AuthManager().configure(
+        AuthConfig(
+          providers: [provider],
+          defaultProviderId: provider.providerId,
+        ),
+      );
+      final dummyUser = KeycloakUser(uid: 'user_1', username: 'test');
+      final validJwt = _createMockJwt(DateTime.now().add(const Duration(minutes: 5)));
+      await AuthManager().setSession(
+        dummyUser,
+        AuthToken(accessToken: validJwt, refreshToken: 'refresh_1'),
+        providerId: provider.providerId,
+      );
+
+      final adapter = MockDioAdapter((attempt) => 401);
+      final authDio = AuthenticatedDio(
+        options: BaseOptions(baseUrl: 'https://example.com'),
+        httpClientAdapter: adapter,
+      );
+
+      try {
+        await authDio.dio.get('/test').timeout(const Duration(seconds: 2));
+        fail('Should have failed with connectionError');
+      } on DioException catch (e) {
+        // Must NOT pass down the 401 response status, preventing app-level logout
+        expect(e.type, equals(DioExceptionType.connectionError));
+        expect(e.response, isNull, reason: '401 must be suppressed so app does not log out on offline refresh');
+      }
+    });
+
+    test('rejects with 401 response when proactive refresh fails due to permanent revocation (400 Bad Request)', () async {
+      final fakeRepo = FakeAuthRepository()..shouldThrowServer400 = true;
+      final provider = KeycloakAuthProvider(repository: fakeRepo);
+      await AuthManager().configure(
+        AuthConfig(
+          providers: [provider],
+          defaultProviderId: provider.providerId,
+        ),
+      );
+      final dummyUser = KeycloakUser(uid: 'user_1', username: 'test');
+      // Token is already expired to trigger proactive refresh in onRequest
+      final expiredJwt = _createMockJwt(DateTime.now().subtract(const Duration(minutes: 5)));
+      await AuthManager().setSession(
+        dummyUser,
+        AuthToken(accessToken: expiredJwt, refreshToken: 'refresh_1'),
+        providerId: provider.providerId,
+      );
+
+      final adapter = MockDioAdapter((attempt) => 200);
+      final authDio = AuthenticatedDio(
+        options: BaseOptions(baseUrl: 'https://example.com'),
+        httpClientAdapter: adapter,
+      );
+
+      try {
+        await authDio.dio.get('/test').timeout(const Duration(seconds: 2));
+        fail('Should have failed with 401');
+      } on DioException catch (e) {
+        expect(e.response?.statusCode, equals(401), reason: 'Permanent refresh failure must yield 401 so app can trigger re-login');
+      }
+    });
+
+    test('suppresses 401 and emits connectionError when refresh returns 429 Too Many Requests (rate limit)', () async {
+      final fakeRepo = FakeAuthRepository()..shouldThrowRateLimit429 = true;
+      final provider = KeycloakAuthProvider(repository: fakeRepo);
+      await AuthManager().configure(
+        AuthConfig(
+          providers: [provider],
+          defaultProviderId: provider.providerId,
+        ),
+      );
+      final dummyUser = KeycloakUser(uid: 'user_1', username: 'test');
+      final validJwt = _createMockJwt(DateTime.now().add(const Duration(minutes: 5)));
+      await AuthManager().setSession(
+        dummyUser,
+        AuthToken(accessToken: validJwt, refreshToken: 'refresh_1'),
+        providerId: provider.providerId,
+      );
+
+      final adapter = MockDioAdapter((attempt) => 401);
+      final authDio = AuthenticatedDio(
+        options: BaseOptions(baseUrl: 'https://example.com'),
+        httpClientAdapter: adapter,
+      );
+
+      try {
+        await authDio.dio.get('/test').timeout(const Duration(seconds: 2));
+        fail('Should have failed with connectionError');
+      } on DioException catch (e) {
+        expect(e.type, equals(DioExceptionType.connectionError));
+        expect(e.response, isNull, reason: '429 rate limit must NOT trigger logout');
+      }
     });
   });
 }

@@ -1,4 +1,4 @@
-## 0.0.4
+## 0.0.5
 
 * Fix iOS background resume 401 burst with proactive JWT expiration checks.
 * Add clock skew and network transit window safety buffer (30s) to preventative refresh.
@@ -7,6 +7,7 @@
 * Guard against `FormData` stream exhaustion during retry attempts.
 * Ensure offline sessions are never cleared on cold boot by managing token lifetime via JWT payload.
 * Pass `providerId` during `setSession` to ensure `AuthManager.refreshSession` reliably resolves the provider.
+* Whitelist explicit Keycloak revocation error codes (`invalid_grant`, `invalid_token`, session not found) to prevent false-positive logouts from rate limits (429) or transient network drops.
 
 ## 0.0.1
 
